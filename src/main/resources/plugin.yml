@@ -1,0 +1,4 @@
+name: nostrreg
+version: '${project.version}'
+main: com.sovereigncraft.nostrreg.Nostrreg
+api-version: '1.20'
