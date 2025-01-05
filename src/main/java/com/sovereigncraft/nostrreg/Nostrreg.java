@@ -26,12 +26,22 @@ public final class Nostrreg extends JavaPlugin {
         // This method is called when the plugin is enabled
         this.getLogger().info("SimpleWebServer Plugin Enabled");
 
-        // Setup custom configuration file (player_data.yml)
+        // Custom config file setup
         this.customConfigFile = new File(getDataFolder(), "player_data.yml");
         if (!this.customConfigFile.exists()) {
-            // If the file doesn't exist, create it from a default resource
-            saveResource("player_data.yml", false);
+            // If file doesn't exist, create it with an empty configuration
+            this.customConfig = new YamlConfiguration();
+            try {
+                this.customConfig.save(this.customConfigFile);
+            } catch (IOException e) {
+                getLogger().severe("Could not create player_data.yml: " + e.getMessage());
+                return; // or handle this error appropriately
+            }
+        } else {
+            // If file exists, load it
+            this.customConfig = YamlConfiguration.loadConfiguration(this.customConfigFile);
         }
+
         this.customConfig = YamlConfiguration.loadConfiguration(this.customConfigFile); // Load the configuration
 
         // Start the HTTP server
@@ -49,13 +59,10 @@ public final class Nostrreg extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // This method is called when the plugin is disabled
-        this.getLogger().info("SimpleWebServer Plugin Disabled");
-
-        // Save the custom configuration file
-        saveCustomConfig();
-
-        // Stop the HTTP server if it's running
+        this.getLogger().info("Nostrreg Plugin Disabled");
+        if (this.customConfig != null) { // Check if customConfig has been initialized
+            saveCustomConfig();
+        }
         if (server != null) {
             server.stop();
         }
@@ -78,13 +85,13 @@ public final class Nostrreg extends JavaPlugin {
                 String npub = args[0]; // Get the first argument (npub)
 
                 // Check if the player is already registered
-                if (customConfig.contains(player.getName()) && (args.length < 2 || !args[1].equalsIgnoreCase("confirm"))) {
+                if (customConfig.contains(player.getName().toLowerCase()) && (args.length < 2 || !args[1].equalsIgnoreCase("confirm"))) {
                     sender.sendMessage("You are already registered. Use /nostrreg " + npub + " confirm to overwrite.");
                     return true;
                 }
 
                 // Save the player's registration
-                customConfig.set(player.getName(), npub);
+                customConfig.set(player.getName().toLowerCase(), npub);
                 saveCustomConfig(); // Save the configuration file
                 sender.sendMessage("Your registration has been saved.");
             } else {
@@ -97,12 +104,14 @@ public final class Nostrreg extends JavaPlugin {
     }
 
     private void saveCustomConfig() {
-        // Save the custom configuration to the file
-        try {
-            customConfig.save(customConfigFile);
-        } catch (Exception e) {
-            // Log an error if saving fails
-            getLogger().severe("Could not save config to " + customConfigFile + ": " + e.getMessage());
+        if (this.customConfig != null) { // Check if customConfig is not null
+            try {
+                this.customConfig.save(this.customConfigFile);
+            } catch (IOException e) {
+                getLogger().severe("Could not save config to " + this.customConfigFile + ": " + e.getMessage());
+            }
+        } else {
+            getLogger().severe("Custom configuration is null, cannot save.");
         }
     }
 
@@ -120,21 +129,28 @@ public final class Nostrreg extends JavaPlugin {
             if ("/.well-known/nostr.json".equals(uri)) {
                 // Handle requests to /.well-known/nostr.json
                 Map<String, String> params = session.getParms(); // Get request parameters
-                String name = params.get("name"); // Get the "name" parameter
+                String name = params.get("name").toLowerCase(); // Get the "name" parameter
 
                 if (name != null) {
                     // If the name parameter is provided, look up the player's data
-                    String npub = customConfig.getString(name);
+                    Nostrreg.this.customConfig = YamlConfiguration.loadConfiguration(Nostrreg.this.customConfigFile);
+                    String npub = Nostrreg.this.customConfig.getString(name);
 
                     if (npub != null) {
                         // If the player is registered, return their npub in JSON format
-                        Map<String, String> jsonMap = new HashMap<>();
-                        Gson gson = new Gson();
-                        jsonMap.put("names", gson.toJson(Map.of(name, npub)));
+                        //Map<String, String> jsonMap = new HashMap<>();
+                        //Gson gson = new Gson();
+                        //jsonMap.put("names", gson.toJson(Map.of(name, npub)));
+                        // Create a nested map structure for JSON
+                        Map<String, Map<String, String>> jsonMap = new HashMap<>();
+                        Map<String, String> namesMap = new HashMap<>();
+                        namesMap.put(name, npub);
+                        jsonMap.put("names", namesMap);
                         return newFixedLengthResponse(Response.Status.OK, "application/json", new Gson().toJson(jsonMap));
                     } else {
                         // Player not found
-                        return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Player not registered");
+                        String response = "Player " + name + " not registered";
+                        return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", response);
                     }
                 } else {
                     // Missing "name" parameter

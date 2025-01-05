@@ -1,4 +1,8 @@
-name: nostrreg
-version: '${project.version}'
+name: Nostrreg
+version: 1.0
 main: com.sovereigncraft.nostrreg.Nostrreg
-api-version: '1.20'
+api-version: 1.20
+commands:
+  nostrreg:
+    description: Register or update NIP-05 for a player.
+    usage: /<command> <npub> [confirm]
