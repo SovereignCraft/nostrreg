@@ -13,6 +13,7 @@ import java.io.File; // Represents file objects
 import java.io.IOException; // Exception for I/O operations
 import java.util.HashMap; // HashMap for key-value storage
 import java.util.Map; // Interface for maps
+import org.bitcoinj.core.Bech32; // Added for Bech32 decoding
 
 // Main plugin class
 public final class Nostrreg extends JavaPlugin {
@@ -67,7 +68,88 @@ public final class Nostrreg extends JavaPlugin {
             server.stop();
         }
     }
+    private String convertNpubToHex(String input) {
+        try {
+            if (!input.startsWith("npub1")) {
+                getLogger().info("Input is not an npub: " + input);
+                return input; // Assume hex if not npub
+            }
 
+            // Decode Bech32
+            Bech32.Bech32Data decoded = Bech32.decode(input);
+            getLogger().info("Decoded HRP: " + decoded.hrp + ", Data length: " + decoded.data.length);
+
+            if (!decoded.hrp.equals("npub")) {
+                getLogger().warning("Invalid HRP: " + decoded.hrp);
+                return null;
+            }
+
+            byte[] data5bit = decoded.data;
+            if (data5bit.length != 52) {
+                getLogger().warning("Unexpected data length: " + data5bit.length + ", expected 52");
+                return null;
+            }
+
+            // Convert all 52 5-bit groups (260 bits) and trim to 256 bits
+            byte[] data8bit = convert5to8(data5bit, 32);
+            if (data8bit == null) {
+                getLogger().warning("5-to-8 conversion returned null");
+                return null;
+            }
+
+            if (data8bit.length != 32) {
+                getLogger().warning("Invalid byte length after conversion: " + data8bit.length);
+                return null;
+            }
+
+            // Convert to hex string
+            StringBuilder hex = new StringBuilder();
+            for (byte b : data8bit) {
+                hex.append(String.format("%02x", b));
+            }
+            getLogger().info("Converted hex: " + hex.toString());
+            return hex.toString();
+        } catch (Exception e) {
+            getLogger().warning("Exception in npub conversion: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private byte[] convert5to8(byte[] data5bit, int expectedBytes) {
+        int totalBits = data5bit.length * 5;
+        getLogger().info("Total bits: " + totalBits);
+        if (totalBits != 260) { // Expect 260 bits (256 key + 4 padding/checksum)
+            getLogger().warning("Total bits not 260: " + totalBits);
+            return null;
+        }
+
+        byte[] data8bit = new byte[expectedBytes];
+        int byteIndex = 0;
+        int bitBuffer = 0;
+        int bitsRemaining = 0;
+
+        for (int i = 0; i < data5bit.length; i++) {
+            bitBuffer = (bitBuffer << 5) | (data5bit[i] & 0x1F);
+            bitsRemaining += 5;
+
+            while (bitsRemaining >= 8) {
+                bitsRemaining -= 8;
+                if (byteIndex < expectedBytes) { // Only fill up to 32 bytes
+                    data8bit[byteIndex++] = (byte) ((bitBuffer >> bitsRemaining) & 0xFF);
+                }
+            }
+        }
+
+        // Log remaining bits (should be 4, discarded as checksum/padding)
+        getLogger().info("Remaining bits after 256: " + bitsRemaining + ", value: " + (bitBuffer & ((1 << bitsRemaining) - 1)));
+
+        if (byteIndex != expectedBytes) {
+            getLogger().warning("Did not fill expected bytes: " + byteIndex + " vs " + expectedBytes);
+            return null;
+        }
+
+        return data8bit;
+    }
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         // Handle the /nostrreg command
@@ -78,11 +160,16 @@ public final class Nostrreg extends JavaPlugin {
 
                 // Check if the required argument is provided
                 if (args.length < 1) {
-                    sender.sendMessage("Usage: /nostrreg <npub> [confirm]");
+                    sender.sendMessage("Usage: /nostrreg <npub-or-hex> [confirm]");
                     return true;
                 }
 
                 String npub = args[0]; // Get the first argument (npub)
+                String hexKey = convertNpubToHex(args[0]);
+                if (hexKey == null) {
+                    sender.sendMessage("Invalid key format! Please provide a valid npub or hex key.");
+                    return true;
+                }
 
                 // Check if the player is already registered
                 if (customConfig.contains(player.getName().toLowerCase()) && (args.length < 2 || !args[1].equalsIgnoreCase("confirm"))) {
@@ -91,7 +178,7 @@ public final class Nostrreg extends JavaPlugin {
                 }
 
                 // Save the player's registration
-                customConfig.set(player.getName().toLowerCase(), npub);
+                customConfig.set(player.getName().toLowerCase(), hexKey);
                 saveCustomConfig(); // Save the configuration file
                 sender.sendMessage("Your registration has been saved.");
             } else {
