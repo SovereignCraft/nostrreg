@@ -1,0 +1,1 @@
+A simple Minecraft plugin that accepts a **/nostrreg [npub or hex]** command in the chat and then registers and hosts a http server **http://localhost/.well-known/nostr.json?name=[playername]** json file compatible with the NIP-05 rotocol
