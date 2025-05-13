@@ -212,12 +212,11 @@ public final class Nostrreg extends JavaPlugin {
         public Response serve(IHTTPSession session) {
             // Handle incoming HTTP requests
             String uri = session.getUri(); // Get the request URI
-
             if ("/.well-known/nostr.json".equals(uri)) {
                 // Handle requests to /.well-known/nostr.json
                 Map<String, String> params = session.getParms(); // Get request parameters
-                String name = params.get("name").toLowerCase(); // Get the "name" parameter
-
+                String name = params.get("name") != null ? params.get("name").toLowerCase() : null; // Get the "name" parameter
+                Response response;
                 if (name != null) {
                     // If the name parameter is provided, look up the player's data
                     Nostrreg.this.customConfig = YamlConfiguration.loadConfiguration(Nostrreg.this.customConfigFile);
@@ -233,16 +232,18 @@ public final class Nostrreg extends JavaPlugin {
                         Map<String, String> namesMap = new HashMap<>();
                         namesMap.put(name, npub);
                         jsonMap.put("names", namesMap);
-                        return newFixedLengthResponse(Response.Status.OK, "application/json", new Gson().toJson(jsonMap));
+                        response = newFixedLengthResponse(Response.Status.OK, "application/json", new Gson().toJson(jsonMap));
                     } else {
                         // Player not found
-                        String response = "Player " + name + " not registered";
-                        return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", response);
+                        response = newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Player " + name + " not registered");
                     }
                 } else {
                     // Missing "name" parameter
-                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing name parameter");
+                    response = newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing name parameter");
                 }
+                // Add CORS header
+                response.addHeader("Access-Control-Allow-Origin", "*");
+                return response;
             }
 
             // Default response for unrecognized endpoints
