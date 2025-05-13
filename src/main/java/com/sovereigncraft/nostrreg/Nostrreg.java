@@ -83,7 +83,27 @@ public final class Nostrreg extends JavaPlugin {
                 }
 
                 String npub = args[0]; // Get the first argument (npub)
+                // Check if the string starts with "npub1"
+                /*if (npub.startsWith("npub1")) {
+                    try {
+                        // Decode the npub using Bech32
+                        Bech32.Bech32Data decoded = Bech32.decode(npub);
 
+                        // Ensure the human-readable part is "npub"
+                        if (!"npub".equals(decoded.hrp)) {
+                            throw new IllegalArgumentException("Invalid npub: incorrect HRP");
+                        }
+
+                        // Convert the Bech32 data from 5-bit to 8-bit
+                        byte[] hexData = convertBits(decoded.data, 5, 8, false);
+
+                        // Convert to hexadecimal string and print
+                        String hex = bytesToHex(hexData);
+                        System.out.println("Hexadecimal: " + hex);
+                    } catch (Exception e) {
+                        System.err.println("Error: " + e.getMessage());
+                    }
+                }*/
                 // Check if the player is already registered
                 if (customConfig.contains(player.getName().toLowerCase()) && (args.length < 2 || !args[1].equalsIgnoreCase("confirm"))) {
                     sender.sendMessage("You are already registered. Use /nostrreg " + npub + " confirm to overwrite.");
@@ -91,6 +111,7 @@ public final class Nostrreg extends JavaPlugin {
                 }
 
                 // Save the player's registration
+
                 customConfig.set(player.getName().toLowerCase(), npub);
                 saveCustomConfig(); // Save the configuration file
                 sender.sendMessage("Your registration has been saved.");
@@ -102,7 +123,48 @@ public final class Nostrreg extends JavaPlugin {
         }
         return false; // Command not recognized
     }
+    /*private static byte[] convertBits(byte[] data, int fromBits, int toBits, boolean pad) throws IllegalArgumentException {
+        int acc = 0;
+        int bits = 0;
+        int maxv = (1 << toBits) - 1;
+        byte[] ret = new byte[(data.length * fromBits + toBits - 1) / toBits];
+        int j = 0;
 
+        for (byte value : data) {
+            if ((value & 0xFF) >> fromBits > 0) {
+                throw new IllegalArgumentException("Invalid data value: " + value);
+            }
+            acc = (acc << fromBits) | value;
+            bits += fromBits;
+            while (bits >= toBits) {
+                bits -= toBits;
+                ret[j++] = (byte) ((acc >> bits) & maxv);
+            }
+        }
+
+        if (pad) {
+            if (bits > 0) {
+                ret[j++] = (byte) ((acc << (toBits - bits)) & maxv);
+            }
+        } else if (bits >= fromBits || ((acc << (toBits - bits)) & maxv) != 0) {
+            throw new IllegalArgumentException("Invalid padding in data");
+        }
+
+        return java.util.Arrays.copyOf(ret, j);
+    }
+
+    // Converts a byte array to a hexadecimal string
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(b & 0xFF);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }*/
     private void saveCustomConfig() {
         if (this.customConfig != null) { // Check if customConfig is not null
             try {
@@ -129,8 +191,8 @@ public final class Nostrreg extends JavaPlugin {
             if ("/.well-known/nostr.json".equals(uri)) {
                 // Handle requests to /.well-known/nostr.json
                 Map<String, String> params = session.getParms(); // Get request parameters
-                String name = params.get("name").toLowerCase(); // Get the "name" parameter
-
+                String name = params.get("name") != null ? params.get("name").toLowerCase() : null; // Get the "name" parameter
+                Response response;
                 if (name != null) {
                     // If the name parameter is provided, look up the player's data
                     Nostrreg.this.customConfig = YamlConfiguration.loadConfiguration(Nostrreg.this.customConfigFile);
@@ -146,16 +208,18 @@ public final class Nostrreg extends JavaPlugin {
                         Map<String, String> namesMap = new HashMap<>();
                         namesMap.put(name, npub);
                         jsonMap.put("names", namesMap);
-                        return newFixedLengthResponse(Response.Status.OK, "application/json", new Gson().toJson(jsonMap));
+                        response = newFixedLengthResponse(Response.Status.OK, "application/json", new Gson().toJson(jsonMap));
                     } else {
                         // Player not found
-                        String response = "Player " + name + " not registered";
-                        return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", response);
+                        response = newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Player " + name + " not registered");
                     }
                 } else {
                     // Missing "name" parameter
-                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing name parameter");
+                    response = newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Missing name parameter");
                 }
+                // Add CORS header
+                response.addHeader("Access-Control-Allow-Origin", "*");
+                return response;
             }
 
             // Default response for unrecognized endpoints
